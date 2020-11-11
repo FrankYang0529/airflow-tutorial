@@ -1,0 +1,62 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:12
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - ./volume/postgresql/data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  webserver:
+    image: apache/airflow:1.10.12-python3.7
+    container_name: webserver
+    entrypoint: /opt/airflow/scripts/entrypoint.sh
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./scripts:/opt/airflow/scripts
+    ports:
+      - "8080:8080"
+
+  scheduler:
+    image: apache/airflow:1.10.12-python3.7
+    container_name: scheduler
+    command: scheduler
+    depends_on:
+      - postgres
+      - webserver
+    env_file:
+      - .env
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+
+  migrate:
+    build:
+      context: .
+      dockerfile: migrate/Dockerfile
+    container_name: migrate
+    command:
+      [
+        "/wait-for",
+        "postgres:5432",
+        "-t",
+        "120",
+        "--",
+        "sh",
+        "-c",
+        '/goose postgres "postgres://airflow:airflow@postgres:5432/airflow?sslmode=disable" up',
+      ]
+    depends_on:
+      - postgres
+    volumes:
+      - ./migrate:/migrate
